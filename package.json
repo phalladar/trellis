@@ -1,0 +1,28 @@
+{
+  "name": "trellis",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local markdown kanban board, web UI, desktop app, CLI and MCP server built for LLM agents and humans.",
+  "author": "Josh Auriemma",
+  "license": "MIT",
+  "bin": {
+    "trellis": "./cli.mjs",
+    "trellis-mcp": "./mcp.mjs",
+    "trellis-server": "./server.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "mcp": "node mcp.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^3.8.1",
+    "@modelcontextprotocol/sdk": "^1.20.0",
+    "marked": "^18.0.0",
+    "yaml": "^2.8.0",
+    "zod": "^3.25.0"
+  }
+}

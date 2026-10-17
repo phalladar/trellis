@@ -1,0 +1,11 @@
+node_modules/
+desktop/node_modules/
+desktop/dist/
+.DS_Store
+# Embedding model cache (lib/embedder.mjs)
+.models/
+# Activity feed of a board server run from source (lib/activity.mjs)
+.activity/
+# Local search index inside a board directory
+.search/
+.lock

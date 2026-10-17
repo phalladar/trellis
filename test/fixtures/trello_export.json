@@ -1,0 +1,345 @@
+{
+  "id": "66f0a1b2c3d4e5f6a7b8c9d0",
+  "name": "FIRST PRINCIPLE (fixture)",
+  "labels": [
+    {
+      "id": "lab1",
+      "name": "art",
+      "color": "purple"
+    },
+    {
+      "id": "lab2",
+      "name": "",
+      "color": "green_dark"
+    }
+  ],
+  "lists": [
+    {
+      "id": "list-decide",
+      "name": "Decisions and Design Spikes",
+      "pos": 1024,
+      "closed": false
+    },
+    {
+      "id": "list-m1",
+      "name": "M1 - Scaffold remediation",
+      "pos": 2048,
+      "closed": false
+    },
+    {
+      "id": "list-m15",
+      "name": "M1.5 - Verticality support",
+      "pos": 3072,
+      "closed": false
+    },
+    {
+      "id": "list-3d",
+      "name": "3D Models",
+      "pos": 4096,
+      "closed": false
+    },
+    {
+      "id": "list-old",
+      "name": "Old lane",
+      "pos": 5120,
+      "closed": true
+    }
+  ],
+  "cards": [
+    {
+      "id": "66f0a1b2c3d4e5f6a7b8c9d1",
+      "idShort": 207,
+      "shortLink": "FoD9ycy9",
+      "name": "Generate the Kiln 3D model",
+      "idList": "list-3d",
+      "pos": 16384,
+      "closed": false,
+      "dateLastActivity": "2026-09-23T10:00:00.000Z",
+      "due": null,
+      "idMembers": [],
+      "labels": [
+        {
+          "id": "lab1",
+          "name": "art",
+          "color": "purple"
+        }
+      ],
+      "desc": "**Context**\n\nThe Kiln is defined at `data/buildings/kiln.tres:12`.\n\n**Why this matters**: GAME_DESIGN.md §6 names the Kiln as Act II's first structure.\n\n**What to do**\n\n1. Model the drum.\n2. Export the GLB.\n\n**Success criteria**\n\n- The review app shows the clip.\n\n**Tests**\n\n```powershell\n# run the checks\n.\\test.ps1 -Filter kiln\n```\n\n**References**\n\n- GAME_DESIGN.md §6\n\n---\n\n**Verticality addendum (2026-09-22)**\n\nThe Kiln is Ground-only.",
+      "attachments": [
+        {
+          "name": "reference.png",
+          "url": "https://example.com/reference.png"
+        }
+      ]
+    },
+    {
+      "id": "66f0a1b2c3d4e5f6a7b8c9d2",
+      "idShort": 150,
+      "shortLink": "aB12cD34",
+      "name": "DECIDE: which unlock mechanism is authoritative",
+      "idList": "list-decide",
+      "pos": 100,
+      "closed": false,
+      "dateLastActivity": "2026-09-22T08:00:00.000Z",
+      "due": "2026-10-01T00:00:00.000Z",
+      "idMembers": [
+        "me"
+      ],
+      "labels": [],
+      "desc": "**Context**\n\nTwo mechanisms exist.\n\n**What to do**\n\n1. Choose one."
+    },
+    {
+      "id": "66f0a1b2c3d4e5f6a7b8c9d3",
+      "idShort": 151,
+      "shortLink": "eF56gH78",
+      "name": "Make belt keys level-aware",
+      "idList": "list-m15",
+      "pos": 200,
+      "closed": false,
+      "dateLastActivity": "2026-09-21T08:00:00.000Z",
+      "due": null,
+      "idMembers": [],
+      "labels": [
+        {
+          "id": "lab2",
+          "name": "",
+          "color": "green_dark"
+        }
+      ],
+      "desc": "Plain description with no headings.\n\nSecond paragraph."
+    },
+    {
+      "id": "66f0a1b2c3d4e5f6a7b8c9d4",
+      "idShort": 12,
+      "shortLink": "zZ99yY88",
+      "name": "An archived card",
+      "idList": "list-m1",
+      "pos": 50,
+      "closed": true,
+      "dateLastActivity": "2026-08-01T08:00:00.000Z",
+      "due": null,
+      "idMembers": [],
+      "labels": [],
+      "desc": ""
+    },
+    {
+      "id": "66f0a1b2c3d4e5f6a7b8c9d5",
+      "idShort": 13,
+      "shortLink": "qQ11wW22",
+      "name": "Second in M1",
+      "idList": "list-m1",
+      "pos": 25,
+      "closed": false,
+      "dateLastActivity": "2026-08-02T08:00:00.000Z",
+      "due": null,
+      "idMembers": [],
+      "labels": [],
+      "desc": "",
+      "dueComplete": true,
+      "dateCompleted": "2026-08-03T09:00:00.000Z"
+    },
+    {
+      "id": "66f0a1b2c3d4e5f6a7b8c9e0",
+      "idShort": 300,
+      "shortLink": "Ad300000",
+      "name": "Add the support map and the Deck placement rule",
+      "idList": "list-m15",
+      "pos": 400,
+      "closed": false,
+      "dateLastActivity": "2026-09-23T12:00:00.000Z",
+      "due": null,
+      "idMembers": [],
+      "labels": [],
+      "desc": "**Context**\n\nTop context.\n\n**What to do**\n\n1. Do the thing.\n\n**References**\n\n- GAME_DESIGN.md §5\n\n---\n\n**Interview addendum (2026-09-23)**\n\nThe owner said so.\n\n**Context**\n\nAddendum context.\n\n**What to do**\n\n2. Do the other thing.\n\n**Additional steps**\n\n- extra\n\n---\n\n**Implementation note (2026-09-24)**\n\nShipped in abc123.\n\n**Context**\n\nNote context."
+    },
+    {
+      "id": "66f0a1b2c3d4e5f6a7b8c9e1",
+      "idShort": 301,
+      "shortLink": "Ad301000",
+      "name": "Correct README: native pan is disabled",
+      "idList": "list-m1",
+      "pos": 75,
+      "closed": false,
+      "dateLastActivity": "2026-09-23T12:00:00.000Z",
+      "due": null,
+      "idMembers": [],
+      "labels": [],
+      "desc": "**Context**\n\nOnly a What to do checklist.\n\n**Steps**\n\nProse that says steps."
+    }
+  ],
+  "checklists": [
+    {
+      "id": "chk1",
+      "idCard": "66f0a1b2c3d4e5f6a7b8c9d1",
+      "name": "Steps",
+      "pos": 1,
+      "checkItems": [
+        {
+          "id": "i2",
+          "name": "Export the GLB",
+          "state": "incomplete",
+          "pos": 2
+        },
+        {
+          "id": "i1",
+          "name": "Model the drum",
+          "state": "complete",
+          "pos": 1
+        },
+        {
+          "id": "i3",
+          "name": "[Verticality] Confirm Ground-only",
+          "state": "incomplete",
+          "pos": 3
+        }
+      ]
+    },
+    {
+      "id": "chk2",
+      "idCard": "66f0a1b2c3d4e5f6a7b8c9d2",
+      "name": "Steps",
+      "pos": 1,
+      "checkItems": [
+        {
+          "id": "i4",
+          "name": "Choose one",
+          "state": "incomplete",
+          "pos": 1
+        }
+      ]
+    },
+    {
+      "id": "chk3",
+      "idCard": "66f0a1b2c3d4e5f6a7b8c9e0",
+      "name": "ZZ DUPLICATE — delete me (see Steps above)",
+      "pos": 0.5,
+      "checkItems": [
+        {
+          "id": "z1",
+          "name": "junk",
+          "state": "incomplete",
+          "pos": 1
+        }
+      ]
+    },
+    {
+      "id": "chk4",
+      "idCard": "66f0a1b2c3d4e5f6a7b8c9e0",
+      "name": "Steps",
+      "pos": 1,
+      "checkItems": [
+        {
+          "id": "s1",
+          "name": "1. Do the thing",
+          "state": "complete",
+          "pos": 1
+        }
+      ]
+    },
+    {
+      "id": "chk5",
+      "idCard": "66f0a1b2c3d4e5f6a7b8c9e0",
+      "name": "Steps (verticality addendum)",
+      "pos": 2,
+      "checkItems": [
+        {
+          "id": "v1",
+          "name": "2. Do the other thing",
+          "state": "incomplete",
+          "pos": 1
+        },
+        {
+          "id": "v2",
+          "name": "[Verticality] already prefixed",
+          "state": "incomplete",
+          "pos": 2
+        }
+      ]
+    },
+    {
+      "id": "chk6",
+      "idCard": "66f0a1b2c3d4e5f6a7b8c9e0",
+      "name": "NOT DONE THIS PASS — read before implementing",
+      "pos": 3,
+      "checkItems": [
+        {
+          "id": "n1",
+          "name": "the hard bit",
+          "state": "incomplete",
+          "pos": 1
+        }
+      ]
+    },
+    {
+      "id": "chk7",
+      "idCard": "66f0a1b2c3d4e5f6a7b8c9e1",
+      "name": "What to do",
+      "pos": 1,
+      "checkItems": [
+        {
+          "id": "w1",
+          "name": "1. Rewrite the row",
+          "state": "incomplete",
+          "pos": 1
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "id": "act1",
+      "type": "commentCard",
+      "date": "2026-09-23T09:30:00.000Z",
+      "memberCreator": {
+        "username": "phalladar",
+        "fullName": "Owner",
+        "id": "member-owner"
+      },
+      "data": {
+        "text": "Looks good, ship it.",
+        "card": {
+          "id": "66f0a1b2c3d4e5f6a7b8c9d1",
+          "idShort": 207
+        }
+      }
+    },
+    {
+      "id": "act2",
+      "type": "commentCard",
+      "date": "2026-09-22T09:30:00.000Z",
+      "memberCreator": {
+        "username": "phalladar",
+        "id": "member-owner"
+      },
+      "data": {
+        "text": "First comment.",
+        "card": {
+          "id": "66f0a1b2c3d4e5f6a7b8c9d1",
+          "idShort": 207
+        }
+      }
+    },
+    {
+      "id": "act3",
+      "type": "updateCard",
+      "date": "2026-09-22T09:31:00.000Z",
+      "memberCreator": {
+        "username": "phalladar",
+        "id": "member-owner"
+      },
+      "data": {
+        "card": {
+          "id": "66f0a1b2c3d4e5f6a7b8c9d1"
+        }
+      }
+    }
+  ],
+  "idMemberCreator": "member-owner",
+  "members": [
+    {
+      "id": "member-owner",
+      "username": "phalladar",
+      "fullName": "Owner"
+    }
+  ]
+}

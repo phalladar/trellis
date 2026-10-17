@@ -1,0 +1,75 @@
+{
+  "name": "trellis-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Trellis: local markdown kanban board for LLM agents and humans, as a desktop app for macOS and Windows.",
+  "author": "Josh Auriemma",
+  "license": "MIT",
+  "main": "entry.mjs",
+  "scripts": {
+    "start": "electron .",
+    "icon": "electron build/render-icon.mjs",
+    "dist:mac": "electron-builder --mac",
+    "dist:win": "electron-builder --win --x64",
+    "dist:win-from-mac": "electron-builder --win zip --x64 -c.win.signAndEditExecutable=false"
+  },
+  "dependencies": {
+    "marked": "18.0.14",
+    "yaml": "^2.8.0"
+  },
+  "devDependencies": {
+    "electron": "44.3.0",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "dev.trellis.app",
+    "productName": "Trellis",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "entry.mjs",
+      "main.mjs",
+      "notification-id.mjs",
+      "package.json",
+      "build/icon-win.png",
+      {
+        "from": "..",
+        "to": "board",
+        "filter": [
+          "server.mjs",
+          "import_trello.mjs",
+          "lib/store.mjs",
+          "lib/registry.mjs",
+          "lib/activity.mjs",
+          "lib/format.mjs",
+          "lib/markdown.mjs",
+          "ui/**/*"
+        ]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "icon": "build/icon.png",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "icon": "build/icon-win.png",
+      "target": [
+        "nsis",
+        "zip"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Trellis"
+    },
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
+  }
+}
