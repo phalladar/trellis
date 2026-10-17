@@ -69,19 +69,19 @@ test('remembers, lists, switches and forgets boards across directories', async (
     await reloaded.switch('Beta Service');
     assert.equal(reloaded.current, dirB);
 
-    // Priority resolution: explicit arg > env > remembered active board > upward cwd.
+    // Priority resolution: explicit arg > env > upward cwd > remembered active board.
     const fromArg = await resolveActiveBoard({ dir: 'alpha', cwd: root, env: {}, registry: reloaded });
     assert.equal(fromArg.boardDir, dirA);
     assert.equal(fromArg.source, 'arg');
 
-    const fromReg = await resolveActiveBoard({ cwd: path.join(root, 'alpha'), env: {}, registry: reloaded });
-    assert.equal(fromReg.boardDir, dirB);
-    assert.equal(fromReg.source, 'registry');
-
-    const emptyReg = new Registry(path.join(root, 'config', 'empty.json'));
-    const fromCwd = await resolveActiveBoard({ cwd: path.join(root, 'alpha'), env: {}, registry: emptyReg });
+    // Inside alpha's project, alpha wins although beta is the active board.
+    const fromCwd = await resolveActiveBoard({ cwd: path.join(root, 'alpha'), env: {}, registry: reloaded });
     assert.equal(fromCwd.boardDir, dirA);
     assert.equal(fromCwd.source, 'cwd');
+
+    const fromReg = await resolveActiveBoard({ cwd: root, env: {}, registry: reloaded });
+    assert.equal(fromReg.boardDir, dirB);
+    assert.equal(fromReg.source, 'registry');
 
     // Forgetting the active board falls back to the next remembered board.
     await reloaded.forget('beta');

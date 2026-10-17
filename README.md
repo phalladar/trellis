@@ -304,8 +304,8 @@ trellis --dir ~/development/my-project cards --list "In Progress"
 
 1. Explicit `--dir` / `-C` flag (CLI) or `board` argument (MCP tool call)
 2. `TRELLIS_DIR` or `BOARD_DIR` environment variable
-3. Active board in `~/.config/trellis/boards.json` (set via `trellis use`, the Web UI switcher, Desktop app, or `board_boards`)
-4. Nearest `board/board.yaml` or `board.yaml` walking upward from `process.cwd()`
+3. Nearest `board/board.yaml` or `board.yaml` walking upward from `process.cwd()`, so an agent started inside a project always gets that project's board
+4. Active board in `~/.config/trellis/boards.json` (set via `trellis use`, the Web UI switcher, Desktop app, or `board_boards`), when the working directory is in no project with a board
 5. Most recently opened existing board in the registry
 
 ### From the Web UI & Desktop App

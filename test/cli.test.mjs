@@ -22,12 +22,15 @@ test('the CLI mirrors the tools and switches between remembered boards', async (
       return `EXIT ${error.code}: ${error.stderr.trim()}`;
     }
   };
-  const cliNoEnvDir = async (...args) => {
+  // Run without a pinned board, from the project at root or (outside) from no project at all.
+  const outside = path.dirname(root);
+  const cliNoEnvDir = async (...args) => cliFrom(root, ...args);
+  const cliFrom = async (cwd, ...args) => {
     const cleanEnv = { ...process.env, TRELLIS_REGISTRY: registryFile, BOARD_AUTHOR: 'codex' };
     delete cleanEnv.BOARD_DIR;
     delete cleanEnv.TRELLIS_DIR;
     try {
-      const { stdout } = await run(process.execPath, [CLI, ...args], { cwd: root, env: cleanEnv });
+      const { stdout } = await run(process.execPath, [CLI, ...args], { cwd, env: cleanEnv });
       return stdout.trimEnd();
     } catch (error) {
       return `EXIT ${error.code}: ${error.stderr.trim()}`;
@@ -47,9 +50,11 @@ test('the CLI mirrors the tools and switches between remembered boards', async (
     // Initialize a second board, list remembered boards, and switch between them.
     assert.match(await cliNoEnvDir('init', secondDir, '--name', 'Second Project', '--lists', 'Todo,Done'), /^ok board created at .* \(other-repo\)$/);
     assert.match(await cliNoEnvDir('boards'), /\*\tother-repo\tSecond Project\t0\t0/);
-    assert.match(await cliNoEnvDir('overview'), /^Second Project · open 0/);
-    assert.match(await cliNoEnvDir('use', dir), /^ok active board "Test"/);
+    assert.match(await cliFrom(outside, 'overview'), /^Second Project · open 0/);
+    // Inside a project its own board wins over the active one.
     assert.match(await cliNoEnvDir('overview'), /^Test · open 0 .* · done 1/);
+    assert.match(await cliNoEnvDir('use', dir), /^ok active board "Test"/);
+    assert.match(await cliFrom(outside, 'overview'), /^Test · open 0 .* · done 1/);
     assert.match(await cliNoEnvDir('-C', 'other-repo', 'overview'), /^Second Project · open 0/);
   } finally { await cleanup(); }
 });
