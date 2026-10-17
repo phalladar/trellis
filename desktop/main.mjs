@@ -343,11 +343,11 @@ function watchSource() {
   follow(HERE, 'relaunch', { only: ['main.mjs', 'notification-id.mjs'] });
 }
 
-async function switchBoardDir(dir) {
+async function switchBoardDir(dir, name) {
   if (!dir) return;
   try {
     if (server?.switchBoard) {
-      await server.switchBoard(dir, { remember: true });
+      await server.switchBoard(dir, { remember: true, name });
       updateWindowTitle();
       await buildMenu();
     } else {
@@ -377,7 +377,7 @@ async function buildMenu() {
     type: 'checkbox',
     checked: entry.dir === settings.boardDir,
     accelerator: `CmdOrCtrl+${idx + 1}`,
-    click: () => switchBoardDir(entry.dir),
+    click: () => switchBoardDir(entry.dir, entry.name),
   }));
 
   function showAbout() {

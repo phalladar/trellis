@@ -69,6 +69,26 @@ pre code { background: none; padding: 0; }
 .board-path { font-size: 12px; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
 .board-trigger .chev { color: var(--muted); font-size: 12px; }
 .board-menu[hidden] { display: none; }
+
+/* Loading a board (beginLoading in app.js): a spinner in place of the board button's chevron,
+   a bar running under the toolbar, and dimmed, inert lanes until the new cards arrive. */
+body.loading .board-trigger .chev { display: none; }
+body.loading .board-trigger::after {
+  content: ''; align-self: center; width: 12px; height: 12px; flex: 0 0 12px; border-radius: 50%;
+  border: 2px solid var(--line); border-top-color: var(--accent); animation: spin .7s linear infinite;
+}
+body.loading .topbar::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent) 0 0 / 40% 100% no-repeat;
+  animation: sweep 1s ease-in-out infinite;
+}
+body.loading .lanes { opacity: .45; pointer-events: none; transition: opacity .15s; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes sweep { from { background-position: -40% 0; } to { background-position: 140% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  body.loading .board-trigger::after { animation: none; border-color: var(--accent); }
+  body.loading .topbar::after { animation: none; background: var(--accent); opacity: .6; }
+}
 .board-menu { position: absolute; top: calc(100% + 8px); left: 0; z-index: 25; width: min(500px, calc(100vw - 24px)); max-height: min(680px, calc(100vh - 76px)); display: flex; flex-direction: column; background: var(--card); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 12px 36px rgba(9, 30, 66, .28); overflow: hidden; }
 .board-menu-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px 8px; border-bottom: 1px solid var(--line); }
 .board-menu-head h2 { font-size: 15px; margin: 0; }

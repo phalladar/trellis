@@ -137,7 +137,8 @@ Remembered boards are stored in `~/.config/trellis/boards.json` (or `$TRELLIS_RE
 
 - Every board gets a short unique `slug` derived from its project folder or board name (`alpha`, `beta`, etc.).
 - Any operation in `lib/ops.mjs` can target the active board or override it per call via `board` (slug, name, or path).
-- `server.mjs` supports hot-switching the active board at runtime (`POST /api/boards/select`, `POST /api/boards/init`, `POST /api/boards/import`), swapping the file watcher and activity feed and broadcasting a `board` SSE event to connected browsers.
+- `server.mjs` supports hot-switching the active board at runtime (`POST /api/boards/select`, `POST /api/boards/init`, `POST /api/boards/import`), swapping the file watcher and activity feed. It broadcasts a `switching` SSE event when a switch begins and a `board` event when it is done; a page shows its loading state between the two and reloads once on `board`. A page that started the switch itself ignores both and finishes the load from its own request.
+- `Board.open(dir)` returns one `Board` per directory for the life of the process, so the server, the registry's board stats and `ops` share each board's parsed-card cache: switching back to a board, or listing every board's counts, re-reads only cards whose file changed (the cache is keyed on each file's mtime and size). `Board.all()` reads card files 32 at a time. Measured on a 990-card board on Windows: a full read went from ~420 ms cold and ~55 ms warm (one file at a time), and a switch's server work from 0.8–1.4 s to 35–400 ms.
 
 ## 5. Concurrency & Operations (`lib/store.mjs`, `lib/ops.mjs`)
 

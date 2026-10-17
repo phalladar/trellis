@@ -22,6 +22,8 @@ const state = {
   activity: { entries: [], seenAt: 0, unread: 0 }, activityOpen: false, activityFilter: 'all', newSince: 0,
   // Remembered boards and the directory switcher (GET /api/boards, GET /api/fs/dirs).
   boards: { current: null, boards: [] }, boardMenuOpen: false, dirBrowser: null, targetDir: '',
+  // True while this page opens, creates or imports a board (switchBoard).
+  switching: false,
   infoOpen: false,
 };
 let drag = null;
@@ -143,11 +145,54 @@ function renderMarkdown(text) {
 
 // ---------- board ----------
 
-async function refresh() {
+// One load at a time. A call while one runs waits for it and then one more, which every
+// caller arriving meanwhile shares, so a burst of change events costs two loads, not one each.
+let refreshing = null;
+let refreshAgain = false;
+function refresh() {
+  if (refreshing) { refreshAgain = true; return refreshing; }
+  refreshing = (async () => {
+    try {
+      do { refreshAgain = false; await loadBoard(); } while (refreshAgain);
+    } finally { refreshing = null; }
+  })();
+  return refreshing;
+}
+
+async function loadBoard() {
   const query = state.q ? `&q=${encodeURIComponent(state.q)}` : '';
   [state.board, state.cards] = await Promise.all([api('GET', '/api/board'), api('GET', `/api/cards?status=all${query}`)]);
   render();
   if (state.openId !== null) await openCard(state.openId, { silent: true });
+}
+
+// ---------- loading ----------
+
+// Marks the page as loading a board: the status says which, the board button names it at
+// once and shows a spinner, and a bar runs under the toolbar while the lanes dim. The
+// visual part waits LOADING_DELAY_MS so a quick switch does not flash. Returns the function
+// that ends it; only the latest load's ends it, so overlapping switches cannot end early.
+const LOADING_DELAY_MS = 150;
+let loadingToken = 0;
+let loadingTimer = null;
+function beginLoading(name) {
+  const token = ++loadingToken;
+  const label = name ? `Opening ${name}…` : 'Loading board…';
+  const status = $('#status');
+  clearTimeout(statusTimer);
+  status.textContent = label;
+  status.classList.remove('err');
+  if (name) $('#board-name').textContent = name;
+  for (const node of [$('#board-button'), $('#lanes')]) node.setAttribute('aria-busy', 'true');
+  clearTimeout(loadingTimer);
+  loadingTimer = setTimeout(() => { if (token === loadingToken) document.body.classList.add('loading'); }, LOADING_DELAY_MS);
+  return () => {
+    if (token !== loadingToken) return;
+    clearTimeout(loadingTimer);
+    document.body.classList.remove('loading');
+    for (const node of [$('#board-button'), $('#lanes')]) node.removeAttribute('aria-busy');
+    if (status.textContent === label) status.textContent = '';
+  };
 }
 
 function visibleCards(listId) {
@@ -456,13 +501,29 @@ function closeBoardMenu({ focus = false } = {}) {
   if (focus) $('#board-button').focus();
 }
 
-async function selectBoardDir(dir) {
-  const result = await attempt(`Switched board`, () => api('POST', '/api/boards/select', { dir }));
-  if (!result) return;
-  state.boards = result;
-  closeBoardMenu();
-  closePanel();
-  await Promise.all([refresh(), loadActivity()]);
+// Opening, creating or importing a board: shows the loading state from the click until the
+// new board's cards are on screen, and loads them once. The server's 'switching' and 'board'
+// events for a switch this page asked for are ignored while it runs (connectEvents).
+async function switchBoard(name, request, doneLabel) {
+  const done = beginLoading(name);
+  state.switching = true;
+  try {
+    let result;
+    try { result = await request(); } catch (error) { setStatus(error.message, true); return null; }
+    state.boards = result;
+    closeBoardMenu();
+    closePanel();
+    await Promise.all([refresh(), loadActivity()]);
+    setStatus(doneLabel(state.board?.name || name || 'board'));
+    return result;
+  } finally {
+    state.switching = false;
+    done();
+  }
+}
+
+async function selectBoardDir(dir, name) {
+  return switchBoard(name, () => api('POST', '/api/boards/select', { dir }), boardName => `Opened ${boardName}`);
 }
 
 async function forgetBoardDir(dir, name) {
@@ -526,17 +587,8 @@ function renderDirBrowser() {
       onclick: async () => {
         const dir = ($('#board-dir-input')?.value || state.targetDir).trim();
         if (!dir) return;
-        const result = await attempt('Created board', () => api('POST', '/api/boards/init', {
-          dir,
-          name: nameInput.value.trim() || folderName,
-          lists: listsInput.value,
-        }));
-        if (result) {
-          state.boards = result;
-          closeBoardMenu();
-          closePanel();
-          await Promise.all([refresh(), loadActivity()]);
-        }
+        const name = nameInput.value.trim() || folderName;
+        await switchBoard(name, () => api('POST', '/api/boards/init', { dir, name, lists: listsInput.value }), boardName => `Created ${boardName}`);
       },
     }, 'Create board here');
 
@@ -549,17 +601,8 @@ function renderDirBrowser() {
         const dir = ($('#board-dir-input')?.value || state.targetDir).trim();
         try {
           const data = JSON.parse(await file.text());
-          const result = await attempt('Imported Trello board', () => api('POST', '/api/boards/import', {
-            dir,
-            name: nameInput.value.trim() || undefined,
-            data,
-          }));
-          if (result) {
-            state.boards = result;
-            closeBoardMenu();
-            closePanel();
-            await Promise.all([refresh(), loadActivity()]);
-          }
+          const name = nameInput.value.trim() || undefined;
+          await switchBoard(name || data.name, () => api('POST', '/api/boards/import', { dir, name, data }), boardName => `Imported ${boardName}`);
         } catch (error) {
           setStatus(`Import failed: ${error.message}`, true);
         }
@@ -591,7 +634,7 @@ function renderBoardMenu() {
       el('button', {
         type: 'button',
         class: 'board-row-main',
-        onclick: () => selectBoardDir(item.dir),
+        onclick: () => selectBoardDir(item.dir, item.name),
       },
       el('span', { class: 'board-row-top' },
         el('span', { class: 'board-row-name' }, item.current ? `✓ ${item.name}` : item.name),
@@ -1214,7 +1257,22 @@ function route() {
 function connectEvents() {
   const source = new EventSource('/api/events');
   source.addEventListener('change', () => Promise.all([refresh(), loadActivity()]).catch(error => setStatus(error.message, true)));
-  source.addEventListener('board', () => { closePanel(); Promise.all([refresh(), loadActivity(), loadBoards()]).catch(error => setStatus(error.message, true)); });
+  // A switch started elsewhere (the desktop menu, another tab) shows the loading state from
+  // its 'switching' event until the new board is loaded. One this page started is
+  // switchBoard's to finish, so both events are ignored while it runs.
+  let externalDone = null;
+  const eventData = event => { try { return JSON.parse(event.data); } catch { return {}; } };
+  source.addEventListener('switching', event => {
+    if (state.switching) return;
+    externalDone = beginLoading(eventData(event).name);
+  });
+  source.addEventListener('board', event => {
+    if (state.switching) return;
+    const done = externalDone || beginLoading(eventData(event).name);
+    externalDone = null;
+    closePanel();
+    Promise.all([refresh(), loadActivity(), loadBoards()]).catch(error => setStatus(error.message, true)).finally(done);
+  });
   source.addEventListener('activity', () => loadActivity().catch(error => setStatus(error.message, true)));
   source.onerror = () => setStatus('Live updates disconnected; retrying…', true);
   source.addEventListener('hello', () => { if ($('#status').classList.contains('err')) setStatus('Live'); });
@@ -1278,4 +1336,5 @@ window.showBoardCard = async (id, { sections = [], status = false, entry } = {})
   if (location.hash === `#card=${id}`) await openCard(id); else location.hash = `card=${id}`;
 };
 
-Promise.all([refresh(), loadActivity(), loadBoards()]).then(() => { route(); connectEvents(); loaded(); }).catch(error => { setStatus(error.message, true); $('#lanes').append(el('div', { class: 'empty-board' }, error.message)); });
+const bootDone = beginLoading();
+Promise.all([refresh(), loadActivity(), loadBoards()]).then(() => { bootDone(); route(); connectEvents(); loaded(); }).catch(error => { bootDone(); setStatus(error.message, true); $('#lanes').append(el('div', { class: 'empty-board' }, error.message)); });

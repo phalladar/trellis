@@ -96,7 +96,7 @@ export function createBoardServer({
 } = {}) {
   const reg = registry instanceof Registry ? registry : new Registry(typeof registry === 'string' ? registry : null);
   const initialBoardDir = path.resolve(boardDir);
-  let board = new Board(initialBoardDir);
+  let board = Board.open(initialBoardDir);
   let root = projectRootFor(board.dir);
   const clients = new Set();
   let watchers = [];
@@ -173,8 +173,11 @@ export function createBoardServer({
 
   async function switchTo(nextDir, { remember = true, name } = {}) {
     const resolved = normalizeBoardDir(nextDir) || path.resolve(nextDir);
+    // Tells every open page a switch has begun, so one started from elsewhere (the desktop
+    // menu, another tab) shows its loading state at once rather than when the cards arrive.
+    broadcast({ type: 'switching', dir: resolved, name, at: Date.now() });
     stopWatching();
-    board = new Board(resolved);
+    board = Board.open(resolved);
     root = projectRootFor(board.dir);
     activity = new Activity(resolveActivityFile(board.dir));
     activityLoaded = activity.load();
@@ -187,9 +190,10 @@ export function createBoardServer({
       entry = await reg.remember(board.dir, { name, setCurrent: true, touch: true });
     }
     if (listening) startWatching();
-    server.emit('board', { boardDir: board.dir, root, name: entry?.name });
-    broadcast({ type: 'board', dir: board.dir, root, name: entry?.name, at: Date.now() });
-    broadcast({ type: 'change', at: Date.now() });
+    const boardName = entry?.name ?? name;
+    server.emit('board', { boardDir: board.dir, root, name: boardName });
+    // A page reloads everything on 'board'; a 'change' after it only made it load twice.
+    broadcast({ type: 'board', dir: board.dir, root, name: boardName, at: Date.now() });
     return entry;
   }
 
@@ -223,7 +227,7 @@ export function createBoardServer({
       const target = body.dir ? expandHome(body.dir) : null;
       if (!target) throw new BoardError('bad_board', 'a directory, slug or board name is required');
       const entry = await reg.switch(body.dir);
-      await switchTo(entry.dir, { remember: false });
+      await switchTo(entry.dir, { remember: false, name: entry.name });
       const listed = await reg.list({ includeStats: true });
       return { ...listed, current: board.dir, root, selected: entry };
     },
