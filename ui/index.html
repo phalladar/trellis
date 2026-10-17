@@ -31,11 +31,15 @@
     <button type="button" id="add-list" class="ghost">+ List</button>
     <span id="status" class="status" aria-live="polite"></span>
     <div class="jewel">
+      <button type="button" id="info-button" class="ghost info-btn" aria-haspopup="dialog" aria-expanded="false" aria-controls="info-modal" aria-label="About Trellis" title="About Trellis">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10 9v5m0-7.5v.8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
       <button type="button" id="activity-button" class="ghost bell" aria-haspopup="dialog" aria-expanded="false" aria-controls="activity" aria-label="Activity" title="Activity">
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.2a5.3 5.3 0 0 0-5.3 5.3v2.9L3.2 13.2a.9.9 0 0 0 .8 1.3h12a.9.9 0 0 0 .8-1.3l-1.5-2.8V7.5A5.3 5.3 0 0 0 10 2.2Z"/><path d="M7.6 15.6a2.5 2.5 0 0 0 4.8 0Z"/></svg>
         <span id="activity-badge" class="badge" hidden></span>
       </button>
       <section id="activity" class="activity" role="dialog" aria-label="Activity" hidden></section>
+      <section id="info-modal" class="info-modal" role="dialog" aria-label="About Trellis" hidden></section>
     </div>
   </header>
   <div class="legend" id="legend"></div>

@@ -377,6 +377,7 @@ export function createBoardServer({
       }
       const cardLink = /^\/card\/(\d+)$/.exec(url.pathname);
       if (cardLink) { response.writeHead(302, { Location: `/#card=${cardLink[1]}` }); return response.end(); }
+      if (url.pathname === '/info' || url.pathname === '/about') { response.writeHead(302, { Location: '/#info' }); return response.end(); }
       if (url.pathname === '/vendor/marked.esm.js') return serveFile(response, MARKED_FILE);
       const file = url.pathname === '/' ? '/index.html' : url.pathname;
       return serveFile(response, inside(path.join(appDir, 'ui'), file));

@@ -21,6 +21,8 @@ const SMOKE = process.argv.includes('--smoke');
 const RELAUNCHED = process.argv.includes('--relaunched');
 const SETTINGS = () => path.join(app.getPath('userData'), 'settings.json');
 
+process.title = 'Trellis';
+app.name = 'Trellis';
 app.setName('Trellis');
 
 let settings = {};
@@ -48,33 +50,82 @@ async function saveSettings() {
   } catch (error) { console.error('could not save settings:', error.message); }
 }
 
-async function chooseBoardDir(reason) {
+function resolveBoardLocation(chosen) {
+  const full = path.resolve(String(chosen));
+  // If chosen directory contains board.yaml directly, user selected the board directory
+  if (existsSync(path.join(full, 'board.yaml'))) {
+    return { boardDir: full, isExisting: true };
+  }
+  // If chosen contains board/board.yaml, user selected the project root directory
+  if (existsSync(path.join(full, 'board', 'board.yaml'))) {
+    return { boardDir: path.join(full, 'board'), isExisting: true };
+  }
+  // Check upwards in case user selected a subfolder within an existing project
+  const upwards = registryMod.findBoardUpwards(full);
+  if (upwards) {
+    return { boardDir: upwards, isExisting: true };
+  }
+  // No existing board found: place in <projectRoot>/board unless the selected folder is already named 'board'
+  const target = path.basename(full) === 'board' ? full : path.join(full, 'board');
+  return { boardDir: target, isExisting: false };
+}
+
+async function chooseOpenBoardDir(reason) {
   const result = await dialog.showOpenDialog(window ?? undefined, {
-    title: 'Open or create board folder',
-    message: reason ?? 'Choose any project repository or board folder.',
+    title: 'Open Board',
+    message: reason ?? 'Locate the root folder of your project (or an existing board folder).',
+    properties: ['openDirectory'],
+  });
+  if (result.canceled || !result.filePaths.length) return null;
+  const chosen = result.filePaths[0];
+  const { boardDir, isExisting } = resolveBoardLocation(chosen);
+
+  if (isExisting) {
+    return boardDir;
+  }
+
+  const projectName = path.basename(registryMod.projectRootFor(boardDir)) || 'Board';
+  const confirm = await dialog.showMessageBox(window ?? undefined, {
+    type: 'question',
+    buttons: ['Create Board', 'Cancel'],
+    defaultId: 0,
+    cancelId: 1,
+    message: `No board found in "${path.basename(chosen)}". Create one?`,
+    detail: `Trellis will put the board in ${boardDir} with default lists (Backlog, Next, Doing, Done).`,
+  });
+  if (confirm.response === 0) {
+    await storeMod.Board.init(boardDir, { name: projectName, lists: ['Backlog', 'Next', 'Doing', 'Done'] });
+    return boardDir;
+  }
+  return null;
+}
+
+async function chooseCreateBoardDir() {
+  const result = await dialog.showOpenDialog(window ?? undefined, {
+    title: 'Create Board',
+    message: 'Locate the root folder of your project to create a board in.',
     properties: ['openDirectory', 'createDirectory'],
   });
   if (result.canceled || !result.filePaths.length) return null;
   const chosen = result.filePaths[0];
-  const existing = registryMod.normalizeBoardDir(chosen);
-  if (existing) return existing;
+  const { boardDir, isExisting } = resolveBoardLocation(chosen);
 
-  const target = registryMod.targetBoardDir(chosen);
-  const projectName = path.basename(registryMod.projectRootFor(target)) || 'Board';
-  const confirm = await dialog.showMessageBox(window ?? undefined, {
-    type: 'question',
-    buttons: ['Create Board', 'Choose Another Folder…', 'Cancel'],
-    defaultId: 0,
-    cancelId: 2,
-    message: `Create a new board for "${projectName}"?`,
-    detail: `No board.yaml was found in ${chosen}. Trellis can initialize a new board at ${target} with default lists (Backlog, Next, Doing, Done).`,
-  });
-  if (confirm.response === 0) {
-    await storeMod.Board.init(target, { name: projectName, lists: ['Backlog', 'Next', 'Doing', 'Done'] });
-    return target;
+  if (isExisting) {
+    const confirm = await dialog.showMessageBox(window ?? undefined, {
+      type: 'info',
+      buttons: ['Open Existing Board', 'Cancel'],
+      defaultId: 0,
+      cancelId: 1,
+      message: 'A board already exists for this project.',
+      detail: `Existing board found at:\n${boardDir}`,
+    });
+    if (confirm.response === 0) return boardDir;
+    return null;
   }
-  if (confirm.response === 1) return chooseBoardDir(reason);
-  return null;
+
+  const projectName = path.basename(registryMod.projectRootFor(boardDir)) || 'Board';
+  await storeMod.Board.init(boardDir, { name: projectName, lists: ['Backlog', 'Next', 'Doing', 'Done'] });
+  return boardDir;
 }
 
 async function resolveInitialBoardDir() {
@@ -85,7 +136,7 @@ async function resolveInitialBoardDir() {
   const resolved = await registryMod.resolveActiveBoard({ registry });
   const existing = registryMod.normalizeBoardDir(resolved.boardDir);
   if (existing) return existing;
-  return (await chooseBoardDir('Choose a project folder to open or initialize a board. Trellis remembers every board you open.')) || resolved.boardDir;
+  return (await chooseOpenBoardDir('Locate the root folder of your project (or an existing board folder) to open or initialize a board.')) || resolved.boardDir;
 }
 
 // ---------- notifications ----------
@@ -308,8 +359,13 @@ async function switchBoardDir(dir) {
   }
 }
 
-async function promptSwitchBoard() {
-  const dir = await chooseBoardDir();
+async function promptOpenBoard() {
+  const dir = await chooseOpenBoardDir();
+  if (dir) await switchBoardDir(dir);
+}
+
+async function promptCreateBoard() {
+  const dir = await chooseCreateBoardDir();
   if (dir) await switchBoardDir(dir);
 }
 
@@ -324,12 +380,36 @@ async function buildMenu() {
     click: () => switchBoardDir(entry.dir),
   }));
 
+  function showAbout() {
+    if (window && !window.isDestroyed()) {
+      window.webContents.executeJavaScript("window.showInfo ? window.showInfo() : (location.hash = 'info')");
+      window.focus();
+    } else if (app.showAboutPanel) {
+      app.showAboutPanel();
+    }
+  }
+
   const template = [
-    ...(isMac ? [{ role: 'appMenu' }] : []),
+    ...(isMac ? [{
+      label: 'Trellis',
+      submenu: [
+        { label: 'About Trellis', click: showAbout },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide', label: 'Hide Trellis' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit', label: 'Quit Trellis' },
+      ],
+    }] : []),
     {
       label: 'File',
       submenu: [
-        { label: 'Open or Create Board Folder…', accelerator: 'CmdOrCtrl+O', click: promptSwitchBoard },
+        { label: 'Open Board…', accelerator: 'CmdOrCtrl+O', click: promptOpenBoard },
+        { label: 'Create Board…', accelerator: 'CmdOrCtrl+N', click: promptCreateBoard },
+        { type: 'separator' },
         {
           label: 'Switch Board',
           submenu: recentItems.length
@@ -358,6 +438,15 @@ async function buildMenu() {
     { role: 'editMenu' },
     { role: 'viewMenu' },
     { role: 'windowMenu' },
+    {
+      role: 'help',
+      submenu: [
+        { label: 'About Trellis…', click: showAbout },
+        { type: 'separator' },
+        { label: 'Created by Joshua Auriemma', enabled: false },
+        { label: 'Visit auriemmai.com', click: () => shell.openExternal('https://auriemmai.com') },
+      ],
+    },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
@@ -375,6 +464,15 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(async () => {
     if (!app.isPackaged && process.platform === 'darwin') app.dock?.setIcon(path.join(HERE, 'build', 'icon.png'));
+    if (app.setAboutPanelOptions) {
+      app.setAboutPanelOptions({
+        applicationName: 'Trellis',
+        applicationVersion: '0.1.0',
+        copyright: 'Copyright © 2026 Joshua Auriemma',
+        credits: 'Created by Joshua Auriemma\nMIT License 2026',
+        website: 'https://auriemmai.com',
+      });
+    }
     ({ activityFileFor, verbOf } = await import(pathToFileURL(ACTIVITY).href));
     registryMod = await import(pathToFileURL(REGISTRY).href);
     storeMod = await import(pathToFileURL(STORE).href);

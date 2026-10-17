@@ -22,6 +22,7 @@ const state = {
   activity: { entries: [], seenAt: 0, unread: 0 }, activityOpen: false, activityFilter: 'all', newSince: 0,
   // Remembered boards and the directory switcher (GET /api/boards, GET /api/fs/dirs).
   boards: { current: null, boards: [] }, boardMenuOpen: false, dirBrowser: null, targetDir: '',
+  infoOpen: false,
 };
 let drag = null;
 
@@ -185,7 +186,12 @@ function render() {
     return;
   }
   const lists = state.board.lists.filter(list => !list.archived || state.showArchived);
-  if (!lists.length) { lanes.append(el('div', { class: 'empty-board' }, 'No lists yet. Use "+ List" or open another board directory from the top-left switcher.')); return; }
+  if (!lists.length) {
+    lanes.append(el('div', { class: 'empty-board' },
+      el('div', {}, 'No lists yet.'),
+      el('button', { type: 'button', class: 'primary', onclick: triggerAddList }, '+ Add a list')));
+    return;
+  }
   for (const list of lists) lanes.append(renderLane(list));
 }
 
@@ -311,19 +317,104 @@ async function onLaneDrop(event, list) {
   await refresh();
 }
 
-// ---------- list actions ----------
+// ---------- list actions & prompt dialog ----------
 
-async function laneMenu(event, list) {
+function promptDialog({ title = 'Prompt', message = '', placeholder = '', defaultValue = '', confirmLabel = 'Save' } = {}) {
+  return new Promise(resolve => {
+    const dialog = el('div', { class: 'prompt-dialog', role: 'dialog', ariaLabel: title });
+    const input = el('input', { type: 'text', placeholder, value: defaultValue });
+    let settled = false;
+    const cleanup = () => {
+      if (settled) return;
+      settled = true;
+      dialog.remove();
+      backdrop.remove();
+      document.removeEventListener('keydown', onKeyDown);
+    };
+    const submit = () => {
+      const val = input.value.trim();
+      cleanup();
+      resolve(val || null);
+    };
+    const cancel = () => {
+      cleanup();
+      resolve(null);
+    };
+    const form = el('form', { onsubmit: e => { e.preventDefault(); submit(); } },
+      el('h3', {}, title),
+      message ? el('p', { class: 'prompt-message' }, message) : null,
+      input,
+      el('div', { class: 'prompt-actions' },
+        el('button', { type: 'button', class: 'ghost', onclick: cancel }, 'Cancel'),
+        el('button', { type: 'submit', class: 'primary' }, confirmLabel),
+      ),
+    );
+    dialog.append(form);
+    const backdrop = el('div', { class: 'prompt-backdrop', onclick: cancel });
+    const onKeyDown = event => {
+      if (event.key === 'Escape') cancel();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    document.body.append(backdrop, dialog);
+    setTimeout(() => {
+      input.focus();
+      input.select();
+    }, 10);
+  });
+}
+
+let activeLaneMenu = null;
+function closeLaneMenu() {
+  if (activeLaneMenu) {
+    activeLaneMenu.remove();
+    activeLaneMenu = null;
+  }
+}
+document.addEventListener('click', () => closeLaneMenu());
+
+function laneMenu(event, list) {
   event.stopPropagation();
-  const choice = window.prompt(`List "${list.name}"\n\n1 rename\n2 ${list.archived ? 'restore' : 'archive'}\n3 add card\n\nType a number:`, '');
-  if (choice === '1') {
-    const name = window.prompt('New name:', list.name);
-    if (name && name.trim() && name.trim() !== list.name) { await attempt('Renamed', () => api('POST', '/api/lists', { action: 'rename', list: list.id, new_name: name.trim() })); await refresh(); }
-  } else if (choice === '2') {
-    await attempt(list.archived ? 'Restored' : 'Archived', () => api('POST', '/api/lists', { action: list.archived ? 'restore' : 'archive', list: list.id }));
-    await refresh();
-  } else if (choice === '3') {
-    state.newCardList = list.id; render(); setTimeout(() => $('.new-card input')?.focus(), 0);
+  closeLaneMenu();
+  const menu = el('div', { class: 'lane-dropdown', role: 'menu' },
+    el('button', {
+      type: 'button',
+      onclick: () => {
+        closeLaneMenu();
+        state.newCardList = list.id;
+        render();
+        setTimeout(() => $('.new-card input')?.focus(), 0);
+      },
+    }, '+ Add card'),
+    el('button', {
+      type: 'button',
+      onclick: async () => {
+        closeLaneMenu();
+        const newName = await promptDialog({
+          title: 'Rename list',
+          defaultValue: list.name,
+          confirmLabel: 'Rename',
+        });
+        if (newName && newName.trim() && newName.trim() !== list.name) {
+          await attempt('Renamed', () => api('POST', '/api/lists', { action: 'rename', list: list.id, new_name: newName.trim() }));
+          await refresh();
+        }
+      },
+    }, 'Rename list…'),
+    el('button', {
+      type: 'button',
+      class: list.archived ? '' : 'danger',
+      onclick: async () => {
+        closeLaneMenu();
+        await attempt(list.archived ? 'Restored' : 'Archived', () => api('POST', '/api/lists', { action: list.archived ? 'restore' : 'archive', list: list.id }));
+        await refresh();
+      },
+    }, list.archived ? 'Restore list' : 'Archive list'),
+  );
+  menu.addEventListener('click', e => e.stopPropagation());
+  const header = event.currentTarget.closest('.lane-head');
+  if (header) {
+    header.append(menu);
+    activeLaneMenu = menu;
   }
 }
 
@@ -346,6 +437,7 @@ async function loadDirs(targetPath) {
 }
 
 async function openBoardMenu() {
+  closeInfoModal();
   closeActivity();
   state.boardMenuOpen = true;
   $('#board-menu').hidden = false;
@@ -952,6 +1044,7 @@ async function markRead(keys) {
 
 async function openActivity() {
   closeBoardMenu();
+  closeInfoModal();
   state.activityOpen = true;
   state.newSince = state.activity.seenAt;
   $('#activity').hidden = false;
@@ -1027,17 +1120,92 @@ function changesBanner(entry) {
     } }, name))) : null);
 }
 
+function renderInfoModal() {
+  const box = $('#info-modal');
+  const head = el('header', { class: 'info-head' },
+    el('div', { class: 'info-title' },
+      el('h2', {}, 'Trellis'),
+      el('span', { class: 'info-version' }, 'v0.1.0')),
+    el('button', { type: 'button', class: 'ghost icon-btn info-close-btn', 'aria-label': 'Close', onclick: () => closeInfoModal({ focus: true }) }, '✕'));
+
+  const creator = el('p', { class: 'info-creator' }, 'Created by Joshua Auriemma');
+
+  const webLink = el('p', {},
+    el('a', { class: 'info-link', href: 'https://auriemmai.com', target: '_blank', rel: 'noopener noreferrer' }, 'https://auriemmai.com'));
+
+  const licenseBox = el('div', { class: 'info-license-box' },
+    el('div', { class: 'info-license-title' }, 'MIT License 2026'),
+    el('pre', { class: 'info-license-text' },
+`Copyright (c) 2026 Joshua Auriemma
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.`));
+
+  box.replaceChildren(head, creator, webLink, licenseBox);
+}
+
+function openInfoModal() {
+  closeBoardMenu();
+  closeActivity();
+  state.infoOpen = true;
+  $('#info-modal').hidden = false;
+  $('#info-button').setAttribute('aria-expanded', 'true');
+  renderInfoModal();
+  $('#info-modal .info-close-btn')?.focus();
+}
+
+function closeInfoModal({ focus = false } = {}) {
+  if (!state.infoOpen) return;
+  state.infoOpen = false;
+  $('#info-modal').hidden = true;
+  $('#info-button').setAttribute('aria-expanded', 'false');
+  if (location.hash === '#info' || location.hash === '#about') {
+    history.replaceState(null, '', location.pathname + location.search);
+  }
+  if (focus) $('#info-button').focus();
+}
+
+$('#info-button').addEventListener('click', event => {
+  event.stopPropagation();
+  if (state.infoOpen) closeInfoModal();
+  else openInfoModal();
+});
+$('#info-modal').addEventListener('click', event => event.stopPropagation());
+
 $('#activity-button').addEventListener('click', event => { event.stopPropagation(); if (state.activityOpen) closeActivity(); else openActivity(); });
 // Clicks inside the feed stay there: a re-render detaches the button clicked, which would
 // otherwise read as a click outside.
 $('#activity').addEventListener('click', event => event.stopPropagation());
-document.addEventListener('click', event => { if (state.activityOpen && !event.target.closest('.jewel')) closeActivity(); });
+document.addEventListener('click', event => {
+  if (state.activityOpen && !event.target.closest('#activity') && !event.target.closest('#activity-button')) closeActivity();
+  if (state.infoOpen && !event.target.closest('#info-modal') && !event.target.closest('#info-button')) closeInfoModal();
+});
 // Keep relative times fresh while the feed is open.
 setInterval(() => { if (state.activityOpen) renderActivity(); }, 60_000);
 
 // ---------- wiring ----------
 
 function route() {
+  if (location.hash === '#info' || location.hash === '#about') {
+    openInfoModal();
+    return;
+  }
+  if (state.infoOpen) closeInfoModal();
   const match = /^#card=(\d+)$/.exec(location.hash);
   if (match) openCard(Number(match[1]));
   else if (state.openId !== null) closePanel();
@@ -1065,18 +1233,29 @@ $('#label-filter').addEventListener('change', event => { state.label = event.tar
 $('#show-done').addEventListener('change', event => { state.showDone = event.target.checked; render(); });
 $('#show-archived').addEventListener('change', event => { state.showArchived = event.target.checked; render(); });
 $('#show-blocked').addEventListener('change', event => { state.blockedOnly = event.target.checked; render(); });
-$('#add-list').addEventListener('click', async () => {
-  const name = window.prompt('List name:', '');
-  if (name && name.trim()) { await attempt('List created', () => api('POST', '/api/lists', { action: 'create', name: name.trim() })); await refresh(); }
-});
+async function triggerAddList() {
+  const name = await promptDialog({
+    title: 'Create new list',
+    placeholder: 'e.g. In Review',
+    confirmLabel: 'Create list',
+  });
+  if (name && name.trim()) {
+    await attempt('List created', () => api('POST', '/api/lists', { action: 'create', name: name.trim() }));
+    await refresh();
+  }
+}
+$('#add-list').addEventListener('click', triggerAddList);
 $('#scrim').addEventListener('click', closePanel);
 document.addEventListener('keydown', event => {
   if (event.key !== 'Escape') return;
+  if (activeLaneMenu) { closeLaneMenu(); return; }
+  if (state.infoOpen) { closeInfoModal({ focus: true }); return; }
   if (state.boardMenuOpen) { closeBoardMenu({ focus: true }); return; }
   if (state.activityOpen) { closeActivity({ focus: true }); return; }
   if (state.openId !== null && !event.target.closest('textarea, input')) closePanel();
 });
 window.addEventListener('hashchange', route);
+window.showInfo = openInfoModal;
 
 // Trellis desktop calls this when a notification is clicked, and the bell when an entry is: open
 // the card and point at what changed. The hash alone cannot, and setting it to the card

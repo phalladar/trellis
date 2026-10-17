@@ -108,7 +108,7 @@ pre code { background: none; padding: 0; }
 .lane.archived { opacity: .7; }
 .lane.drop-before { box-shadow: -4px 0 0 var(--accent); }
 .lane.drop-after { box-shadow: 4px 0 0 var(--accent); }
-.lane-head { display: flex; align-items: center; gap: 8px; padding: 10px 10px 6px 12px; cursor: grab; }
+.lane-head { position: relative; display: flex; align-items: center; gap: 8px; padding: 10px 10px 6px 12px; cursor: grab; }
 .lane-head h2 { font-size: 14px; margin: 0; flex: 1; line-height: 1.3; }
 .lane-head .count { color: var(--muted); font-size: 12px; }
 .lane-head .kinds { display: inline-flex; gap: 4px; }
@@ -209,14 +209,41 @@ pre code { background: none; padding: 0; }
 .notice button { margin-left: auto; }
 .empty-board { padding: 40px; color: var(--muted); display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
 
-/* The bell: an activity feed of every card change (lib/activity.mjs). */
-/* Pinned to the top-right corner, so it never wraps however full the header is. */
-.jewel { position: absolute; top: 9px; right: 14px; }
-.bell { position: relative; width: 34px; height: 30px; padding: 0; display: inline-grid; place-items: center; border-color: transparent; border-radius: 8px; }
-.bell:hover, .bell[aria-expanded="true"] { background: var(--lane); border-color: var(--line); }
+/* The jewel: info button and activity bell pinned to the top-right corner. */
+.jewel { position: absolute; top: 9px; right: 14px; display: flex; gap: 4px; align-items: center; }
+.info-btn, .bell { position: relative; width: 34px; height: 30px; padding: 0; display: inline-grid; place-items: center; border-color: transparent; border-radius: 8px; }
+.info-btn:hover, .info-btn[aria-expanded="true"], .bell:hover, .bell[aria-expanded="true"] { background: var(--lane); border-color: var(--line); }
+.info-btn svg { width: 18px; height: 18px; stroke: var(--ink); }
 .bell svg { width: 19px; height: 19px; fill: var(--ink); }
 .bell .badge { position: absolute; top: -5px; right: -6px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--danger); color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums; box-shadow: 0 0 0 2px var(--card); }
-.activity[hidden] { display: none; }
+.activity[hidden], .info-modal[hidden] { display: none; }
+.info-modal {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  width: min(440px, calc(100vw - 24px));
+  max-height: min(620px, calc(100vh - 80px));
+  display: flex;
+  flex-direction: column;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(9, 30, 66, .28);
+  padding: 20px 22px;
+  overflow-y: auto;
+  gap: 12px;
+}
+.info-head { display: flex; align-items: center; justify-content: space-between; }
+.info-title { display: flex; align-items: baseline; gap: 8px; }
+.info-title h2 { margin: 0; font-size: 20px; font-weight: 700; color: var(--ink); }
+.info-version { font-size: 12px; font-weight: 600; color: var(--muted); background: var(--lane); padding: 2px 7px; border-radius: 10px; }
+.info-creator { font-size: 15px; font-weight: 600; color: var(--ink); margin: 0; }
+.info-link { font-size: 14px; color: var(--accent); text-decoration: none; word-break: break-all; }
+.info-link:hover { text-decoration: underline; }
+.info-license-box { background: var(--lane); border: 1px solid var(--line); border-radius: 8px; padding: 12px; font-size: 12px; line-height: 1.5; color: var(--muted); margin-top: 4px; }
+.info-license-title { font-weight: 600; color: var(--ink); margin-bottom: 6px; font-size: 13px; }
+.info-license-text { white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; margin: 0; }
 .activity { position: absolute; top: calc(100% + 8px); right: 0; z-index: 20; width: min(400px, calc(100vw - 24px)); max-height: min(640px, calc(100vh - 80px)); display: flex; flex-direction: column; background: var(--card); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 12px 36px rgba(9, 30, 66, .28); overflow: hidden; }
 .activity-head { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 12px 12px 8px 14px; }
 .activity-title { display: flex; align-items: center; gap: 8px; align-self: stretch; }
@@ -256,3 +283,57 @@ pre code { background: none; padding: 0; }
 .changes-quote b { color: var(--ink); font-weight: 600; }
 .changes-jump { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; color: var(--muted); font-size: 12px; }
 .changes-jump button { font-size: 12px; padding: 1px 8px; border-radius: 10px; }
+
+/* Modal prompt dialog */
+.prompt-backdrop { position: fixed; inset: 0; background: rgba(9, 30, 66, .45); z-index: 100; }
+.prompt-dialog {
+  position: fixed;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 16px 40px rgba(9, 30, 66, .3);
+  padding: 16px 20px;
+  width: min(380px, calc(100vw - 32px));
+  z-index: 101;
+}
+.prompt-dialog h3 { margin: 0 0 10px; font-size: 15px; font-weight: 600; }
+.prompt-dialog .prompt-message { font-size: 13px; color: var(--muted); margin: 0 0 10px; }
+.prompt-dialog input[type=text] { width: 100%; font-size: 14px; margin-bottom: 14px; }
+.prompt-dialog .prompt-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* Lane actions dropdown */
+.lane-dropdown {
+  position: absolute;
+  top: calc(100% - 2px);
+  right: 8px;
+  z-index: 30;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(9, 30, 66, .2);
+  display: flex;
+  flex-direction: column;
+  min-width: 140px;
+  padding: 4px;
+}
+.lane-dropdown button {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  padding: 6px 10px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.lane-dropdown button:hover {
+  background: var(--lane);
+}
+.lane-dropdown button.danger {
+  color: var(--danger);
+}
