@@ -27,7 +27,7 @@ const OWN_MS = 5000;
 // Resolved through Node rather than a fixed node_modules path, so the desktop app
 // (desktop/), which bundles this server beside its own dependencies, finds it too.
 const MARKED_FILE = fileURLToPath(import.meta.resolve('marked'));
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json; charset=utf-8', '.png': 'image/png' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' };
 
 function json(response, status, body) {
   const text = JSON.stringify(body);
@@ -324,6 +324,12 @@ export function createBoardServer({
     },
     async 'POST /api/cards/:id/move'(url, id, body) { own(id); const result = await board.move(id, body); return { id: result.card.id, list: result.card.list, index: result.index, count: result.count }; },
     async 'POST /api/cards/:id/steps'(url, id, body) { own(id); const { rev, ...rest } = body; const result = await board.steps(id, rest, { rev }); return { id: result.card.id, rev: result.card.rev, section: result.section, items: result.items, done: result.done, total: result.total }; },
+    // A pasted image, as base64 or a data: URL. Returns `ref`, the path its card's markdown links with.
+    async 'POST /api/cards/:id/attachments'(url, id, body) {
+      const data = String(body.data || '').replace(/^data:[^,]*;base64,/, '');
+      const result = await board.attach(id, Buffer.from(data, 'base64'));
+      return { id: result.card.id, path: result.path, ref: result.ref, type: result.type, size: result.size };
+    },
     async 'POST /api/cards/:id/comments'(url, id, body) { own(id); const result = await board.comment(id, { author: body.author || author, text: body.text }); return { id: result.card.id, rev: result.card.rev, comment: result.comment, index: result.index }; },
     async 'GET /api/activity'(url) {
       await recording;
@@ -383,6 +389,7 @@ export function createBoardServer({
       if (cardLink) { response.writeHead(302, { Location: `/#card=${cardLink[1]}` }); return response.end(); }
       if (url.pathname === '/info' || url.pathname === '/about') { response.writeHead(302, { Location: '/#info' }); return response.end(); }
       if (url.pathname === '/vendor/marked.esm.js') return serveFile(response, MARKED_FILE);
+      if (url.pathname.startsWith('/attachments/')) return serveFile(response, inside(board.attachmentsDir, decodeURIComponent(url.pathname.slice('/attachments'.length))));
       const file = url.pathname === '/' ? '/index.html' : url.pathname;
       return serveFile(response, inside(path.join(appDir, 'ui'), file));
     } catch (error) {

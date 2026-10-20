@@ -38,8 +38,10 @@ export async function createBoardServer({
 
   const run = fn => async args => {
     try {
-      const { text } = await fn(args ?? {});
-      return { content: [{ type: 'text', text }] };
+      const { text, images = [] } = await fn(args ?? {});
+      const content = [{ type: 'text', text }];
+      for (const image of images) content.push({ type: 'text', text: `[${image.label}] ${image.path}` }, { type: 'image', data: image.data, mimeType: image.mimeType });
+      return { content };
     } catch (error) {
       return { isError: true, content: [{ type: 'text', text: `error: ${error.message}` }] };
     }
@@ -94,6 +96,7 @@ export async function createBoardServer({
       sections: z.array(z.string()).optional().describe('section names, or prefixes matching every section they start (e.g. "Implementation note"); default all, within the size limit'),
       full: z.boolean().optional().describe('with no sections, return every section however large'),
       comments: z.number().int().min(0).optional().describe('how many recent comments; default 3, 0 for none'),
+      images: z.boolean().optional().describe('attach images the shown text links to (pasted screenshots); default true'),
       format,
     },
     annotations: read,

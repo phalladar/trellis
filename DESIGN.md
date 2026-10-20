@@ -32,7 +32,11 @@ Being local fixes latency and offline availability. The token cost is a property
   cards/
     0001-initial-setup.md
     0002-....md
+  attachments/               # images pasted into comments and sections
+    0001/3f9c0a1b2d4e5f60.png
 ```
+
+A pasted image is stored once per card, named by a hash of its content, and linked from the card as ordinary Markdown relative to the card file (`![Image1](../attachments/0001/3f9c0a1b2d4e5f60.png)`), so it also renders in git hosts and editors. In the Web UI, pasting or dropping an image into a comment or section editor inserts an `[Image1]` token, and the image is uploaded only when the text is posted or saved. `board_card` returns the images that the text it renders links to as MCP image content (the last six at most; pass `images: false` to skip them), so an agent sees a screenshot instead of just its path.
 
 When initialized inside a repository root (a directory with `.git`, `package.json`, `Cargo.toml`, `pyproject.toml`, `go.mod`, or `project.godot`), Trellis places the board in `<repo>/board/` by default (or directly in `<dir>/` with `--here`).
 

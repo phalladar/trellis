@@ -114,10 +114,105 @@ function refChip(id, { onRemove } = {}) {
   return chip;
 }
 
+// ---------- pasted images ----------
+
+const IMAGE_TOKEN = /\[Image(\d+)\]/g;
+
+const blobBase64 = blob => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => resolve(String(reader.result).replace(/^data:[^,]*;base64,/, ''));
+  reader.onerror = () => reject(reader.error);
+  reader.readAsDataURL(blob);
+});
+
+// Pasting or dropping an image into `area` puts an [ImageN] token at the cursor and a
+// thumbnail chip in `chips`; nothing is uploaded until `resolve(text)`, which uploads the
+// images whose tokens are still in the text and swaps each for a markdown image. Numbering
+// continues after the images the text already holds, so an edited section keeps unique names.
+function imagePaster(area, cardId) {
+  const images = new Map();
+  let next = 1 + Math.max(0, ...[...area.value.matchAll(/!\[Image(\d+)\]/g)].map(match => Number(match[1])));
+  const chips = el('div', { class: 'paste-chips', hidden: true });
+  const renderChips = () => {
+    const present = new Set([...area.value.matchAll(IMAGE_TOKEN)].map(match => Number(match[1])));
+    const shown = [...images].filter(([n]) => present.has(n));
+    chips.hidden = !shown.length;
+    chips.replaceChildren(...shown.map(([n, image]) => el('span', { class: 'paste-chip', title: `Image${n}` },
+      el('img', { src: image.url, alt: `Image${n}`, onclick: () => openLightbox(image.url, `Image${n}`) }),
+      `[Image${n}]`,
+      el('button', { type: 'button', class: 'x', title: 'Remove image', 'aria-label': `Remove Image${n}`, onclick: () => {
+        area.value = area.value.replace(new RegExp(`[ ]?\\[Image${n}\\]`, 'g'), '');
+        renderChips();
+        area.focus();
+      } }, '×'))));
+  };
+  const insert = files => {
+    const tokens = files.map(file => {
+      const n = next++;
+      images.set(n, { blob: file, url: URL.createObjectURL(file) });
+      return `[Image${n}]`;
+    });
+    const start = area.selectionStart ?? area.value.length;
+    const end = area.selectionEnd ?? start;
+    const before = area.value.slice(0, start);
+    const text = (before && !/\s$/.test(before) ? ' ' : '') + tokens.join(' ') + ' ';
+    area.setRangeText(text, start, end, 'end');
+    area.dispatchEvent(new Event('input'));
+  };
+  const imagesOf = list => [...(list || [])].filter(file => file.type.startsWith('image/'));
+  area.addEventListener('paste', event => {
+    const files = imagesOf(event.clipboardData?.files);
+    if (!files.length) return;
+    event.preventDefault();
+    insert(files);
+  });
+  area.addEventListener('dragover', event => { if ([...(event.dataTransfer?.items || [])].some(item => item.type.startsWith('image/'))) event.preventDefault(); });
+  area.addEventListener('drop', event => {
+    const files = imagesOf(event.dataTransfer?.files);
+    if (!files.length) return;
+    event.preventDefault();
+    area.focus();
+    insert(files);
+  });
+  area.addEventListener('input', renderChips);
+  const resolve = async text => {
+    let out = text;
+    for (const n of new Set([...text.matchAll(IMAGE_TOKEN)].map(match => Number(match[1])))) {
+      const image = images.get(n);
+      if (!image) continue;
+      image.ref ??= (await api('POST', `/api/cards/${cardId}/attachments`, { data: await blobBase64(image.blob) })).ref;
+      out = out.replaceAll(`[Image${n}]`, `![Image${n}](${image.ref})`);
+    }
+    return out;
+  };
+  const clear = () => { for (const image of images.values()) URL.revokeObjectURL(image.url); images.clear(); renderChips(); };
+  return { chips, resolve, clear };
+}
+
+function openLightbox(src, alt) {
+  const close = () => { box.remove(); document.removeEventListener('keydown', onKey, true); };
+  const onKey = event => { if (event.key === 'Escape') { event.stopPropagation(); close(); } };
+  const box = el('div', { class: 'lightbox', role: 'dialog', 'aria-label': alt || 'Image', onclick: close },
+    el('img', { src, alt: alt || '' }),
+    el('a', { class: 'open', href: src, target: '_blank', rel: 'noopener', onclick: event => event.stopPropagation() }, 'Open original ↗'));
+  document.addEventListener('keydown', onKey, true);
+  document.body.append(box);
+}
+
 // ---------- markdown ----------
 
 function renderMarkdown(text) {
   const box = el('div', { html: marked.parse(text || '') });
+  // A card's images link from its file in cards/; the server serves them at /attachments/.
+  for (const image of box.querySelectorAll('img')) {
+    const src = image.getAttribute('src') || '';
+    const local = /^(?:\.\.\/)?attachments\/(.+)$/.exec(src);
+    if (local) image.src = `/attachments/${local[1]}`;
+    image.loading = 'lazy';
+    image.classList.add('attachment');
+    image.title = image.alt || '';
+    image.addEventListener('click', event => { event.preventDefault(); event.stopPropagation(); openLightbox(image.src, image.alt); });
+  }
   for (const link of box.querySelectorAll('a')) {
     const href = link.getAttribute('href') || '';
     if (href.startsWith('#card=')) continue;
@@ -704,7 +799,7 @@ document.addEventListener('click', event => {
 // ---------- card panel ----------
 
 async function openCard(id, { silent = false, force = false } = {}) {
-  if (state.editors > 0 && !force) {
+  if (editing() && !force) {
     if (silent) { state.staleWhileEditing = true; renderStaleNotice(); }
     return;
   }
@@ -727,6 +822,7 @@ function closePanel() {
   state.card = null;
   state.editors = 0;
   state.banner = null;
+  composer = null;
   $('#panel').hidden = true;
   $('#scrim').hidden = true;
   if (location.hash.startsWith('#card=')) history.replaceState(null, '', location.pathname);
@@ -763,6 +859,38 @@ function copyIdButton(id) {
     }
   });
   return button;
+}
+
+// The comment being written on the open card: { id, area, node }. renderPanel puts the same
+// node back for the same card, so a re-render never drops a draft or its pasted images.
+let composer = null;
+const editing = () => state.editors > 0 || Boolean(composer?.area.value.trim());
+
+function commentComposer(id) {
+  const area = el('textarea', { placeholder: 'Write a comment (markdown). Paste or drop images…', style: 'min-height:80px' });
+  const paster = imagePaster(area, id);
+  // While a draft is unsent, a live update shows the stale notice instead (openCard); once
+  // the draft is cleared, any update held back meanwhile loads.
+  area.addEventListener('input', () => { if (state.staleWhileEditing && !editing()) openCard(id, { force: true }); });
+  let posting = false;
+  const post = async () => {
+    const text = area.value.trim();
+    if (!text || posting) return;
+    posting = true;
+    const posted = await attempt('Comment posted', async () => {
+      await api('POST', `/api/cards/${id}/comments`, { text: await paster.resolve(text), author: 'owner' });
+      area.value = '';
+      paster.clear();
+      return true;
+    });
+    posting = false;
+    if (!posted) return;
+    await openCard(id, { force: true });
+    await refresh();
+  };
+  area.addEventListener('keydown', event => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) post(); });
+  const node = el('div', { class: 'editor' }, area, paster.chips, el('div', { class: 'row' }, el('button', { class: 'primary', onclick: post }, 'Post as owner')));
+  return { id, area, node };
 }
 
 function renderPanel() {
@@ -833,16 +961,8 @@ function renderPanel() {
   for (const comment of card.commentList) {
     comments.append(el('div', { class: 'comment' }, el('div', { class: 'who' }, el('b', {}, comment.author), ` · ${comment.at.replace('T', ' ').replace('Z', ' UTC')}`), el('div', { class: 'body' }, renderMarkdown(comment.text))));
   }
-  const commentBox = el('textarea', { placeholder: 'Write a comment (markdown)…', style: 'min-height:80px' });
-  const post = async () => {
-    const text = commentBox.value.trim();
-    if (!text) return;
-    await attempt('Comment posted', async () => { await api('POST', `/api/cards/${card.id}/comments`, { text, author: 'owner' }); commentBox.value = ''; });
-    await openCard(card.id, { force: true });
-    await refresh();
-  };
-  commentBox.addEventListener('keydown', event => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) post(); });
-  comments.append(el('div', { class: 'editor' }, commentBox, el('div', { class: 'row' }, el('button', { class: 'primary', onclick: post }, 'Post as owner'))));
+  if (composer?.id !== card.id) composer = commentComposer(card.id);
+  comments.append(composer.node);
   panel.append(comments);
 
   // footer
@@ -902,7 +1022,7 @@ function renderAddSection() {
       state.editors = Math.max(0, state.editors - 1);
       box.replaceChildren(add);
       add.focus();
-      if (state.staleWhileEditing && state.editors === 0) openCard(card.id, { force: true });
+      if (state.staleWhileEditing && !editing()) openCard(card.id, { force: true });
     };
     const cancelButton = el('button', { type: 'button', class: 'ghost', onclick: cancel }, 'Cancel');
     const form = el('form', { class: 'editor' }, el('label', { for: 'new-section-heading' }, 'Section heading'), heading, el('div', { class: 'row' }, cancelButton, create));
@@ -953,12 +1073,20 @@ function renderSection(section) {
     state.editors += 1;
     const area = el('textarea', { value: section.body });
     area.value = section.body;
+    const paster = imagePaster(area, card.id);
     const finish = () => { state.editors = Math.max(0, state.editors - 1); };
-    const save = async () => { finish(); const changed = area.value.trim() !== section.body.trim(); if (changed) await patchCard(`Saved "${section.name}"`, { set_sections: { [section.name]: area.value } }); else renderPanel(); };
+    const save = async () => {
+      const changed = area.value.trim() !== section.body.trim();
+      if (!changed) { finish(); renderPanel(); return; }
+      let text;
+      try { text = await paster.resolve(area.value); } catch (error) { setStatus(error.message, true); return; }
+      finish();
+      await patchCard(`Saved "${section.name}"`, { set_sections: { [section.name]: text } });
+    };
     const cancel = () => { finish(); if (state.staleWhileEditing) openCard(card.id, { force: true }); else renderPanel(); };
     area.addEventListener('keydown', event => { if (event.key === 'Escape') cancel(); if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) save(); });
     const remove = async () => { if (window.confirm(`Delete section "${section.name}"?`)) { finish(); await patchCard('Section removed', { remove_sections: [section.name] }); } };
-    body.replaceChildren(el('div', { class: 'editor' }, area, el('div', { class: 'row' }, el('button', { class: 'danger ghost', onclick: remove }, 'Delete section'), el('span', { style: 'flex:1' }), el('button', { class: 'ghost', onclick: cancel }, 'Cancel'), el('button', { class: 'primary', onclick: save }, 'Save'))));
+    body.replaceChildren(el('div', { class: 'editor' }, area, paster.chips, el('div', { class: 'row' }, el('button', { class: 'danger ghost', onclick: remove }, 'Delete section'), el('span', { style: 'flex:1' }), el('button', { class: 'ghost', onclick: cancel }, 'Cancel'), el('button', { class: 'primary', onclick: save }, 'Save'))));
     head.querySelector('button')?.remove();
     area.focus();
   };
@@ -1320,13 +1448,13 @@ window.showInfo = openInfoModal;
 // already open does nothing. `entry` is the feed entry's key: it is marked read, and the
 // panel opens with a banner of what it changed.
 // Trellis desktop asks this before reloading for a change to the board tool's source.
-window.boardEditing = () => state.editors > 0;
+window.boardEditing = editing;
 
 let loaded;
 const ready = new Promise(resolve => { loaded = resolve; });
 window.showBoardCard = async (id, { sections = [], status = false, entry } = {}) => {
   await ready;
-  if (state.editors > 0) { setStatus(`Save or cancel your edit to open #${id}`, true); return; }
+  if (editing()) { setStatus(`Save, post or clear your edit to open #${id}`, true); return; }
   if (entry) {
     if (!state.activity.entries.some(item => item.key === entry)) await loadActivity().catch(() => {});
     if (state.activity.entries.find(item => item.key === entry)?.read === false) markRead([entry]);
