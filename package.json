@@ -1,6 +1,6 @@
 {
   "name": "trellis",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "Local markdown kanban board, web UI, desktop app, CLI and MCP server built for LLM agents and humans.",
   "author": "Joshua Auriemma",

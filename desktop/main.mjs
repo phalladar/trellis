@@ -467,7 +467,7 @@ if (!app.requestSingleInstanceLock()) {
     if (app.setAboutPanelOptions) {
       app.setAboutPanelOptions({
         applicationName: 'Trellis',
-        applicationVersion: '0.1.0',
+        applicationVersion: '0.2.0',
         copyright: 'Copyright © 2026 Joshua Auriemma',
         credits: 'Created by Joshua Auriemma\nMIT License 2026',
         website: 'https://auriemmai.com',

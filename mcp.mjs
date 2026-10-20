@@ -34,7 +34,7 @@ export async function createBoardServer({
   const board = new Board(resolved.boardDir);
   if (await board.exists()) await reg.remember(board.dir, { setCurrent: true, touch: false });
   const ops = makeOps(board, { author, registry: reg });
-  const server = new McpServer({ name: 'trellis', version: '0.1.0' });
+  const server = new McpServer({ name: 'trellis', version: '0.2.0' });
 
   const run = fn => async args => {
     try {

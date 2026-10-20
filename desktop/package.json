@@ -1,7 +1,7 @@
 {
   "name": "trellis-desktop",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "Trellis: local markdown kanban board for LLM agents and humans, as a desktop app for macOS and Windows.",
   "author": "Joshua Auriemma",
