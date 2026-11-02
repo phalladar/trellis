@@ -312,6 +312,8 @@ trellis --dir ~/development/my-project cards --list "In Progress"
 
 Click the **Board name button** in the top-left header to open the **Board Switcher**:
 - Click any remembered board to switch immediately (hot-swaps the file watcher and SSE stream without restarting the server).
+
+An open board follows the files on disk, including a `git pull`: file watchers update it at once, a check every 5 seconds catches anything they miss, and it also reloads when the window regains focus or the live stream reconnects.
 - Browse directories on disk with live path autocomplete to **Open** an existing board, **Create** a new board with custom swimlanes, or **Import** a Trello `.json` export right from the browser.
 
 ---

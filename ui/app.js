@@ -1403,7 +1403,23 @@ function connectEvents() {
   });
   source.addEventListener('activity', () => loadActivity().catch(error => setStatus(error.message, true)));
   source.onerror = () => setStatus('Live updates disconnected; retrying…', true);
-  source.addEventListener('hello', () => { if ($('#status').classList.contains('err')) setStatus('Live'); });
+  let connected = false;
+  source.addEventListener('hello', () => {
+    if ($('#status').classList.contains('err')) setStatus('Live');
+    // Whatever changed while the stream was down sent no event; a machine that slept is one way.
+    if (connected) reload();
+    connected = true;
+  });
+  // Coming back to the window is when a stale board shows: the pull was just run in a terminal.
+  window.addEventListener('focus', reload);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) reload(); });
+}
+
+let lastReload = 0;
+function reload() {
+  if (Date.now() - lastReload < 1000) return;
+  lastReload = Date.now();
+  Promise.all([refresh(), loadActivity()]).catch(error => setStatus(error.message, true));
 }
 
 let searchTimer = null;

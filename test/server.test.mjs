@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
-import { once } from 'node:events';
+import { EventEmitter, once } from 'node:events';
 import path from 'node:path';
 import { test } from 'node:test';
+import { setTimeout } from 'node:timers/promises';
 import { createBoardServer } from '../server.mjs';
 import { tempBoard } from './helpers.mjs';
 
@@ -153,4 +154,69 @@ test('the feed persists, and records what changed while no server ran', async ()
     assert.equal(second.server.activity.unread(), 1);
     second.server.close();
   } finally { await cleanup(); }
+});
+
+// A server whose file watchers never fire and can be made to fail, as they can on a real disk.
+async function withQuietWatchers(fn) {
+  const { dir, registryFile, board, cleanup } = await tempBoard();
+  const made = [];
+  const watchFiles = target => { const watcher = Object.assign(new EventEmitter(), { target, close() {} }); made.push(watcher); return watcher; };
+  const server = createBoardServer({ boardDir: dir, registry: registryFile, watchFiles, pollMs: 40 });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const controller = new AbortController();
+  const response = await fetch(`http://127.0.0.1:${server.address().port}/api/events`, { signal: controller.signal });
+  const decoder = new TextDecoder();
+  const events = [];
+  (async () => {
+    try { for await (const chunk of response.body) events.push(...decoder.decode(chunk).match(/event: \w+/g) ?? []); } catch { /* aborted */ }
+  })();
+  const changes = () => events.filter(event => event === 'event: change').length;
+  const until = async (test, ms = 5000) => {
+    const deadline = Date.now() + ms;
+    while (!test() && Date.now() < deadline) await setTimeout(10);
+    return test();
+  };
+  try { await fn({ board, made, changes, until }); } finally { controller.abort(); server.close(); await cleanup(); }
+}
+
+test('a change the file watchers miss still reaches the page', async () => {
+  await withQuietWatchers(async ({ board, changes, until }) => {
+    await setTimeout(120); // the first check takes the baseline
+    await board.create({ title: 'Pulled', list: 'M0' });
+    assert.ok(await until(() => changes() >= 1), 'no change event');
+  });
+});
+
+test('an idle board sends no change events', async () => {
+  await withQuietWatchers(async ({ board, changes }) => {
+    await board.create({ title: 'Before', list: 'M0' });
+    await setTimeout(300);
+    const settled = changes();
+    await setTimeout(300);
+    assert.equal(changes(), settled);
+  });
+});
+
+test('one change sends one change event, however it is noticed', async () => {
+  await withQuietWatchers(async ({ board, made, changes, until }) => {
+    await setTimeout(120);
+    await board.create({ title: 'Once', list: 'M0' });
+    assert.ok(await until(() => changes() >= 1), 'no change event');
+    await setTimeout(300);
+    assert.equal(changes(), 1);
+    assert.ok(made.length >= 2);
+  });
+});
+
+test('a failed file watcher does not crash the server and is replaced', async () => {
+  await withQuietWatchers(async ({ board, made, changes, until }) => {
+    const before = made.length;
+    const failed = made[0];
+    failed.emit('error', Object.assign(new Error('watch failed'), { code: 'EPERM' }));
+    assert.ok(await until(() => made.length > before), 'watcher not replaced');
+    assert.equal(made.at(-1).target, failed.target);
+    await board.create({ title: 'After', list: 'M0' });
+    assert.ok(await until(() => changes() >= 1), 'no change event after the failure');
+  });
 });

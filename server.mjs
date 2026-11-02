@@ -84,8 +84,15 @@ function expandHome(input) {
   return path.resolve(raw);
 }
 
+// How often the board on disk is compared with what the page was last told, and how soon a
+// failed file watcher is replaced. File watchers can miss a change (a git pull, a machine that
+// slept), so they make updates instant and this check makes them certain.
+const POLL_MS = 5_000;
+const REWATCH_MS = 1_000;
+
 // `activityFile` keeps the activity feed across restarts; without one it lives in memory
 // unless `activityDir` is provided (which creates one activity file per board directory).
+// `pollMs` of 0 turns the check off.
 export function createBoardServer({
   boardDir = DEFAULT_BOARD_DIR,
   appDir = APP_DIR,
@@ -93,6 +100,8 @@ export function createBoardServer({
   activityFile = null,
   activityDir = null,
   registry = null,
+  watchFiles = watch,
+  pollMs = POLL_MS,
 } = {}) {
   const reg = registry instanceof Registry ? registry : new Registry(typeof registry === 'string' ? registry : null);
   const initialBoardDir = path.resolve(boardDir);
@@ -101,6 +110,9 @@ export function createBoardServer({
   const clients = new Set();
   let watchers = [];
   let debounce = null;
+  let pollTimer = null;
+  let rewatchTimers = new Set();
+  let seen = null;
   const resolveActivityFile = dir => {
     if (activityFile && path.resolve(dir) === initialBoardDir) return activityFile;
     if (activityDir) return activityFileFor(dir, activityDir);
@@ -123,8 +135,13 @@ export function createBoardServer({
   function stopWatching() {
     clearTimeout(debounce);
     debounce = null;
+    clearInterval(pollTimer);
+    pollTimer = null;
+    for (const timer of rewatchTimers) clearTimeout(timer);
+    rewatchTimers = new Set();
     for (const watcher of watchers) watcher.close();
     watchers = [];
+    seen = null;
   }
 
   // One diff at a time, so two quick changes never compare against the same fingerprint.
@@ -158,16 +175,50 @@ export function createBoardServer({
 
   function startWatching() {
     stopWatching();
+    const watched = board;
+    const fingerprint = () => watched.fingerprint().catch(() => null);
     const notify = () => {
       clearTimeout(debounce);
-      debounce = setTimeout(async () => { await recordActivity(); broadcast({ type: 'change', at: Date.now() }); }, 120);
+      debounce = setTimeout(async () => {
+        await recordActivity();
+        const now = await fingerprint();
+        if (watched !== board || !listening) return;
+        if (now !== null) seen = now; // told once, so the check below doesn't tell it again
+        broadcast({ type: 'change', at: Date.now() });
+      }, 120);
+    };
+    const follow = target => {
+      try {
+        const watcher = watchFiles(target, { persistent: false }, notify);
+        // Without a listener a failed watcher takes the whole process down.
+        watcher.on('error', () => {
+          watcher.close();
+          watchers = watchers.filter(other => other !== watcher);
+          const timer = setTimeout(() => { rewatchTimers.delete(timer); follow(target); notify(); }, REWATCH_MS);
+          timer.unref?.();
+          rewatchTimers.add(timer);
+        });
+        watchers.push(watcher);
+      } catch { /* the directory may not exist yet */ }
     };
     recordActivity();
     board.exists().then(exists => {
       if (exists) reg.remember(board.dir, { setCurrent: true, touch: false }).catch(() => {});
     });
-    for (const target of [board.cardsDir, board.dir]) {
-      try { watchers.push(watch(target, { persistent: false }, notify)); } catch { /* the directory may not exist yet */ }
+    for (const target of [board.cardsDir, board.dir]) follow(target);
+    fingerprint().then(now => { if (watched === board && seen === null) seen = now; });
+    if (pollMs > 0) {
+      let checking = false;
+      pollTimer = setInterval(async () => {
+        if (checking) return;
+        checking = true;
+        const now = await fingerprint();
+        checking = false;
+        if (watched !== board || now === null) return;
+        if (seen === null) seen = now;
+        else if (now !== seen) { seen = now; notify(); }
+      }, pollMs);
+      pollTimer.unref?.();
     }
   }
 
